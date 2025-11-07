@@ -1,0 +1,38 @@
+# Test Configuration
+test:
+  # Database configuration for testing
+  database:
+    # Test container configuration
+    container:
+      image: "postgres:15"
+      port: 5432
+      database: "testdb"
+      username: "testuser"
+      password: "testpass"
+      
+    # Test database names
+    source_db: "test_source"
+    target_db: "test_target"
+    
+  # Test data configuration
+  data:
+    fixtures_path: "tests/fixtures"
+    temp_dir: "/tmp/dbrts-tests"
+    
+  # Test execution configuration
+  execution:
+    timeout: "30s"
+    parallel_workers: 2
+    cleanup_on_failure: true
+    
+  # Performance test configuration
+  performance:
+    large_dataset_rows: 100000
+    memory_limit_mb: 512
+    benchmark_iterations: 5
+    
+  # Integration test configuration
+  integration:
+    container_startup_timeout: "60s"
+    test_data_size: "small" # small, medium, large
+    enable_logging: false

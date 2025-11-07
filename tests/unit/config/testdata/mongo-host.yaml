@@ -1,0 +1,6 @@
+database:
+  type: mongo
+  host: cluster.internal
+  database: analytics
+  username: mongo
+  password: passw0rd

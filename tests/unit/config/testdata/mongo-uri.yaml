@@ -1,0 +1,4 @@
+database:
+  type: mongo
+  uri: mongodb+srv://user:pass@example.mongodb.net/prod?tls=true
+  database: prod

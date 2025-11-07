@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  postgres-source:
+    image: postgres:15
+    container_name: postgres-source
+    environment:
+      POSTGRES_DB: dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - source_data:/var/lib/postgresql/data
+      - ./init-source.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - dbrts-net
+
+  postgres-target:
+    image: postgres:15
+    container_name: postgres-target
+    environment:
+      POSTGRES_DB: stage
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5433:5432"
+    volumes:
+      - target_data:/var/lib/postgresql/data
+    networks:
+      - dbrts-net
+
+volumes:
+  source_data:
+  target_data:
+
+networks:
+  dbrts-net:
+    driver: bridge 
