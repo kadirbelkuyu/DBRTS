@@ -1,4 +1,4 @@
-.PHONY: build clean test test-unit fmt lint deps run run-transfer run-backup run-restore run-list tools-postgres tools-mongo help
+.PHONY: build clean test test-unit fmt lint deps run run-transfer run-backup run-restore run-list run-explore tools-postgres tools-mongo help
 
 APP_NAME := dbrts
 BIN_DIR := bin
@@ -6,6 +6,7 @@ BIN_PATH := $(BIN_DIR)/$(APP_NAME)
 CONFIG_DIR := configs
 SRC_CONFIG ?= $(CONFIG_DIR)/source-mongo.yaml
 DST_CONFIG ?= $(CONFIG_DIR)/test-mongo.yaml
+EXPLORE_CONFIG ?= $(SRC_CONFIG)
 
 build:
 	@echo ">> building $(APP_NAME)"
@@ -52,6 +53,9 @@ run-restore: build
 run-list: build
 	@$(BIN_PATH) list-databases --config $(SRC_CONFIG)
 
+run-explore: build
+	@$(BIN_PATH) explore --config $(EXPLORE_CONFIG)
+
 tools-postgres:
 	@./scripts/install-postgresql-tools.sh
 
@@ -59,7 +63,7 @@ tools-mongo:
 	@./scripts/install-mongodb-tools.sh
 
 help:
-	@echo "Database Application Make targets:"
+	@echo "DBRTS Make targets:"
 	@echo "  build          Build the CLI binary"
 	@echo "  clean          Remove build artifacts"
 	@echo "  deps           Run go mod tidy"
@@ -72,6 +76,6 @@ help:
 	@echo "  run-backup     Run the backup command"
 	@echo "  run-restore    Run the restore command"
 	@echo "  run-list       List databases using Source config"
+	@echo "  run-explore    Launch the schema explorer"
 	@echo "  tools-postgres Install PostgreSQL client tools"
 	@echo "  tools-mongo    Install MongoDB Database Tools"
-*** End Patch

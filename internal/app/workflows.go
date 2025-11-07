@@ -12,7 +12,13 @@ import (
 	"github.com/kadirbelkuyu/DBRTS/pkg/logger"
 )
 
-func RunTransfer(sourceCfg, targetCfg *config.Config, schemaOnly, dataOnly bool, workers, batch int, verboseFlag bool) error {
+type Service struct{}
+
+func NewService() *Service {
+	return &Service{}
+}
+
+func (s *Service) Transfer(sourceCfg, targetCfg *config.Config, schemaOnly, dataOnly bool, workers, batch int, verboseFlag bool) error {
 	if schemaOnly && dataOnly {
 		fmt.Println("Both schema-only and data-only were selected. Running a full transfer instead.")
 		schemaOnly = false
@@ -43,7 +49,7 @@ func RunTransfer(sourceCfg, targetCfg *config.Config, schemaOnly, dataOnly bool,
 	return nil
 }
 
-func RunBackup(cfg *config.Config, verboseFlag bool) error {
+func (s *Service) Backup(cfg *config.Config, verboseFlag bool) error {
 	log := logger.NewLogger(verboseFlag)
 	log.Logger.Info("Starting backup...")
 
@@ -89,7 +95,7 @@ func RunBackup(cfg *config.Config, verboseFlag bool) error {
 	return nil
 }
 
-func RunRestore(cfg *config.Config, verboseFlag bool) error {
+func (s *Service) Restore(cfg *config.Config, verboseFlag bool) error {
 	log := logger.NewLogger(verboseFlag)
 	log.Logger.Info("Starting restore...")
 
@@ -119,7 +125,7 @@ func RunRestore(cfg *config.Config, verboseFlag bool) error {
 	return nil
 }
 
-func ListDatabases(cfg *config.Config) error {
+func (s *Service) ListDatabases(cfg *config.Config) error {
 	log := logger.NewLogger(false)
 	service, err := backup.NewService(cfg, log)
 	if err != nil {

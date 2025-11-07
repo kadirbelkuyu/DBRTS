@@ -8,6 +8,8 @@ Database Restore Transfer System is the terminal companion we use to shuttle dat
 - **Transfer pipelines** – migrate schemas and data with batching, worker pools, and progress feedback (PostgreSQL) or clone collections with index replication (MongoDB).
 - **Backup & restore orchestration** – wrap `pg_dump`/`pg_restore` and `mongodump`/`mongorestore`, capture metadata, calculate checksums, and store artifacts under `backup/`.
 - **Interactive mode** – launch `dbrts interactive` to drive transfers, backups, restores, or listings via guided prompts.
+- **Connection profiles** – every config you enter can be saved and recalled from the wizard; no more copy/pasting file paths.
+- **Live explorer** – open a TUI with `dbrts explore` to browse tables or collections, preview rows/documents, and run ad-hoc SQL or MongoDB JSON commands without leaving the terminal.
 - **Verbose logging & progress bars** – toggle rich diagnostics and monitor long-running jobs directly from the terminal.
 
 ## Requirements
@@ -47,6 +49,19 @@ go build -o bin/dbrts ./cmd/dbrts
 # Optional make targets
 make deps   # install Go toolchain dependencies
 make build  # compile into ./bin
+```
+
+### Run the CLI
+
+```bash
+# Option 1: use the Makefile helper
+make run          # builds then launches the interactive wizard
+
+# Option 2: run the binary directly
+./bin/dbrts interactive
+
+# Inspect available commands/flags
+./bin/dbrts --help
 ```
 
 ## Usage
@@ -111,11 +126,42 @@ When you start the app you land on the interactive screen in the screenshot abov
 ./bin/dbrts list-databases --config configs/source-mongo.yaml
 ```
 
+### Explore a database interactively
+
+`dbrts explore` opens a split-view console: the left pane lists tables (PostgreSQL) or collections (MongoDB), the top-right pane shows live data, and the bottom-right pane displays metadata.
+
+1. Launch the explorer with a config that points to the engine you want to inspect.
+2. Use the arrow keys to move through tables or collections; the preview refreshes automatically.
+3. Press `:` to open the command palette, `r` to refresh the active preview, or `q` to exit.
+
+```bash
+# PostgreSQL schema explorer
+./bin/dbrts explore --config configs/source-postgres.yaml
+
+# MongoDB collection explorer
+./bin/dbrts explore --config configs/source-mongo.yaml
+```
+
+Preview queries fetch up to 200 rows for PostgreSQL and 50 documents for MongoDB, keeping the interface responsive while still surfacing enough data to audit what is stored.
+
+#### Command palette
+
+Inside the explorer, hit `:` to execute write/read operations without leaving the TUI.
+
+- **PostgreSQL** — type any SQL statement. `SELECT` queries render directly in the preview (trimmed to 200 rows). `INSERT`, `UPDATE`, and `DELETE` run immediately; the footer reminds you to hit `r` if you want to refresh the current table afterwards.
+- **MongoDB** — use verb-prefixed JSON commands:
+  - `insert {"name":"alpha","status":"active"}`
+  - `update {"filter":{"_id":{"$oid":"..."}}, "update":{"$set":{"status":"archived"}}}`
+  - `delete {"filter":{"status":"temp"}}`
+  - `find {"status":"active"}` (leave the payload empty to search with an empty filter)
+
+Payloads accept Extended JSON (e.g., `$oid`, `$date`). The explorer validates input before executing anything against the database.
+
 ## Configuration
 
 ### Saved configs
 
-The interactive wizard looks inside `configs/` and offers whatever it finds as ready-made options. If the directory is empty, Database Restore Transfer System will prompt for engine type, hostname (or SRV URI), credentials, and database names, then persist the answers back to `configs/<name>.yaml`. Rename those files however you like; they’re just regular YAML.
+The interactive wizard reads everything under `configs/` via the profile manager and lists the aliases alongside their engine type. Pick a number to reuse an existing profile or choose `n` to define a new one. After you fill in the prompts, the wizard offers to save the profile back to disk (you can override the suggested alias). Those YAML files remain fully editable in Git.
 
 ### Manual YAML
 

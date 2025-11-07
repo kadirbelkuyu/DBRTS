@@ -7,6 +7,7 @@ import (
 
 	"github.com/kadirbelkuyu/DBRTS/internal/app"
 	"github.com/kadirbelkuyu/DBRTS/internal/config"
+	"github.com/kadirbelkuyu/DBRTS/internal/ui/explorer"
 
 	"github.com/spf13/cobra"
 )
@@ -63,6 +64,14 @@ var interactiveCmd = &cobra.Command{
 	RunE:  runInteractive,
 }
 
+var exploreCmd = &cobra.Command{
+	Use:   "explore",
+	Short: "Inspect databases with the interactive console",
+	RunE:  runExplore,
+}
+
+var workflowService = app.NewService()
+
 var (
 	sourceConfigPath string
 	targetConfigPath string
@@ -97,11 +106,20 @@ func init() {
 	listDbCmd.Flags().StringVar(&configPath, "config", "", "Path to the database configuration file")
 	listDbCmd.MarkFlagRequired("config")
 
+	exploreCmd.Flags().StringVar(&configPath, "config", "", "Path to the database configuration file")
+	exploreCmd.MarkFlagRequired("config")
+
 	rootCmd.AddCommand(transferCmd)
 	rootCmd.AddCommand(backupCmd)
 	rootCmd.AddCommand(restoreCmd)
 	rootCmd.AddCommand(listDbCmd)
 	rootCmd.AddCommand(interactiveCmd)
+	rootCmd.AddCommand(exploreCmd)
+
+	cobra.OnInitialize(func() {
+		rootCmd.SilenceUsage = true
+		rootCmd.SilenceErrors = true
+	})
 }
 
 func main() {
@@ -127,7 +145,7 @@ func runTransfer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot load target config: %w", err)
 	}
 
-	return app.RunTransfer(sourceConfig, targetConfig, schemaOnly, dataOnly, parallelWorkers, batchSize, verbose)
+	return workflowService.Transfer(sourceConfig, targetConfig, schemaOnly, dataOnly, parallelWorkers, batchSize, verbose)
 }
 
 func runBackup(cmd *cobra.Command, args []string) error {
@@ -136,7 +154,7 @@ func runBackup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot load config: %w", err)
 	}
 
-	return app.RunBackup(cfg, verbose)
+	return workflowService.Backup(cfg, verbose)
 }
 
 func runRestore(cmd *cobra.Command, args []string) error {
@@ -145,7 +163,7 @@ func runRestore(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot load config: %w", err)
 	}
 
-	return app.RunRestore(cfg, verbose)
+	return workflowService.Restore(cfg, verbose)
 }
 
 func runListDatabases(cmd *cobra.Command, args []string) error {
@@ -154,7 +172,15 @@ func runListDatabases(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot load config: %w", err)
 	}
 
-	return app.ListDatabases(cfg)
+	return workflowService.ListDatabases(cfg)
+}
+
+func runExplore(cmd *cobra.Command, args []string) error {
+	cfg, err := config.LoadConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("cannot load config: %w", err)
+	}
+	return explorer.Run(cfg)
 }
 
 func printBanner() {
