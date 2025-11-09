@@ -9,6 +9,7 @@ Database Restore Transfer System is the terminal companion we use to shuttle dat
 - **Backup & restore orchestration** – wrap `pg_dump`/`pg_restore` and `mongodump`/`mongorestore`, capture metadata, calculate checksums, and store artifacts under `backup/`.
 - **Interactive mode** – launch `dbrts interactive` to drive transfers, backups, restores, or listings via guided prompts.
 - **Connection profiles** – every config you enter can be saved and recalled from the wizard; no more copy/pasting file paths.
+- **Desktop studio** – run `dbrts desktop` for a Fyne-powered UI that edits profiles, explores data visually, and launches transfers/backups/restores without the terminal.
 - **Live explorer** – open a TUI with `dbrts explore` to browse tables or collections, preview rows/documents, and run ad-hoc SQL or MongoDB JSON commands without leaving the terminal.
 - **Verbose logging & progress bars** – toggle rich diagnostics and monitor long-running jobs directly from the terminal.
 
@@ -50,6 +51,22 @@ go build -o bin/dbrts ./cmd/dbrts
 make deps   # install Go toolchain dependencies
 make build  # compile into ./bin
 ```
+
+### Launch the desktop UI
+
+The desktop companion uses [Fyne](https://fyne.io/) to provide a native window. Build the CLI once (as above) and then run:
+
+```bash
+./bin/dbrts desktop --config-dir configs
+```
+
+The UI is split into three workspaces:
+
+- **Profiles** – manage YAML configs graphically, test connections, and persist new aliases under `configs/`.
+- **Explorer** – browse tables/collections from the selected profile, preview data with live refresh, and run SQL or Mongo JSON commands (insert/update/delete/find) via the command palette.
+- **Operations** – orchestrate transfers, backups, and restores using dropdowns for saved profiles, rich option panels (workers, compression, schema-only, etc.), and an activity log that mirrors CLI output.
+
+> The desktop app runs locally; ensure your OS allows GUI apps from the terminal session you use.
 
 ### Run the CLI
 

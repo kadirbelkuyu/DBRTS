@@ -7,6 +7,7 @@ import (
 
 	"github.com/kadirbelkuyu/DBRTS/internal/app"
 	"github.com/kadirbelkuyu/DBRTS/internal/config"
+	"github.com/kadirbelkuyu/DBRTS/internal/ui/desktop"
 	"github.com/kadirbelkuyu/DBRTS/internal/ui/explorer"
 
 	"github.com/spf13/cobra"
@@ -70,6 +71,12 @@ var exploreCmd = &cobra.Command{
 	RunE:  runExplore,
 }
 
+var desktopCmd = &cobra.Command{
+	Use:   "desktop",
+	Short: "Launch the DBRTS desktop UI",
+	RunE:  runDesktop,
+}
+
 var workflowService = app.NewService()
 
 var (
@@ -81,6 +88,7 @@ var (
 	parallelWorkers  int
 	batchSize        int
 	verbose          bool
+	configDirFlag    string
 )
 
 func init() {
@@ -109,12 +117,15 @@ func init() {
 	exploreCmd.Flags().StringVar(&configPath, "config", "", "Path to the database configuration file")
 	exploreCmd.MarkFlagRequired("config")
 
+	desktopCmd.Flags().StringVar(&configDirFlag, "config-dir", "configs", "Directory containing saved connection profiles")
+
 	rootCmd.AddCommand(transferCmd)
 	rootCmd.AddCommand(backupCmd)
 	rootCmd.AddCommand(restoreCmd)
 	rootCmd.AddCommand(listDbCmd)
 	rootCmd.AddCommand(interactiveCmd)
 	rootCmd.AddCommand(exploreCmd)
+	rootCmd.AddCommand(desktopCmd)
 
 	cobra.OnInitialize(func() {
 		rootCmd.SilenceUsage = true
@@ -181,6 +192,10 @@ func runExplore(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot load config: %w", err)
 	}
 	return explorer.Run(cfg)
+}
+
+func runDesktop(cmd *cobra.Command, args []string) error {
+	return desktop.Run(configDirFlag)
 }
 
 func printBanner() {
