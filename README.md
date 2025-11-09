@@ -63,7 +63,7 @@ The desktop companion uses [Fyne](https://fyne.io/) to provide a native window. 
 The UI is split into three workspaces:
 
 - **Profiles** – manage YAML configs graphically, test connections, and persist new aliases under `configs/`.
-- **Explorer** – browse tables/collections from the selected profile, preview data with live refresh, and run SQL or Mongo JSON commands (insert/update/delete/find) via the command palette.
+- **Explorer** – browse tables/collections from the selected profile, filter the preview (`WHERE` clause or Mongo JSON), create/duplicate/edit/delete rows or documents through modals, and run SQL or Mongo JSON commands (insert/update/delete/find) via the command palette.
 - **Operations** – orchestrate transfers, backups, and restores using dropdowns for saved profiles, rich option panels (workers, compression, schema-only, etc.), and an activity log that mirrors CLI output.
 
 > The desktop app runs locally; ensure your OS allows GUI apps from the terminal session you use.
