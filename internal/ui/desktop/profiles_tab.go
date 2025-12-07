@@ -26,56 +26,88 @@ func (a *App) buildProfilesTab() fyne.CanvasObject {
 		a.profileForm = newProfileEditor(a)
 	}
 
+	a.profileSearch = widget.NewEntry()
+	a.profileSearch.SetPlaceHolder("🔍 Search profiles...")
+	a.profileSearch.OnChanged = func(text string) {
+		a.filterProfileList(text)
+	}
+
 	a.profileList = widget.NewList(
 		func() int {
+			if len(a.profileFiltered) > 0 {
+				return len(a.profileFiltered)
+			}
 			return len(a.profileItems)
 		},
 		func() fyne.CanvasObject {
+			icon := widget.NewIcon(theme.AccountIcon())
 			name := widget.NewLabel("")
 			name.TextStyle = fyne.TextStyle{Bold: true}
 			meta := widget.NewLabel("")
 			meta.TextStyle = fyne.TextStyle{Italic: true}
-			return container.NewVBox(name, meta)
+			header := container.NewHBox(icon, name)
+			return container.NewVBox(header, meta)
 		},
 		func(id widget.ListItemID, item fyne.CanvasObject) {
-			index := int(id)
+			index := a.getProfileActualIndex(int(id))
 			if index < 0 || index >= len(a.profileItems) {
 				return
 			}
 			profile := a.profileItems[index]
 			box := item.(*fyne.Container)
 			if len(box.Objects) >= 2 {
-				if label, ok := box.Objects[0].(*widget.Label); ok {
-					label.SetText(profile.Name)
+				headerBox := box.Objects[0].(*fyne.Container)
+				if len(headerBox.Objects) >= 2 {
+					iconWidget := headerBox.Objects[0].(*widget.Icon)
+					nameLabel := headerBox.Objects[1].(*widget.Label)
+					if strings.ToLower(profile.Type) == "mongo" {
+						iconWidget.SetResource(theme.StorageIcon())
+					} else {
+						iconWidget.SetResource(theme.ComputerIcon())
+					}
+					nameLabel.SetText(profile.Name)
 				}
-				if label, ok := box.Objects[1].(*widget.Label); ok {
-					label.SetText(profileMeta(profile))
-				}
+				box.Objects[1].(*widget.Label).SetText(profileMeta(profile))
 			}
 		},
 	)
 	a.profileList.OnSelected = func(id widget.ListItemID) {
-		a.handleProfileSelection(int(id))
+		index := a.getProfileActualIndex(int(id))
+		a.handleProfileSelection(index)
 	}
 	a.profileList.OnUnselected = func(id widget.ListItemID) {
 		a.profileForm.reset(nil, nil)
 	}
 
-	listCard := widget.NewCard("Saved Profiles", "", container.NewMax(a.profileList))
+	deleteBtn := widget.NewButtonWithIcon("Delete", theme.DeleteIcon(), func() {
+		a.deleteSelectedProfile()
+	})
+	deleteBtn.Importance = widget.DangerImportance
+
+	duplicateBtn := widget.NewButtonWithIcon("Duplicate", theme.ContentCopyIcon(), func() {
+		a.duplicateSelectedProfile()
+	})
+
+	listActions := container.NewGridWithColumns(2, duplicateBtn, deleteBtn)
+	listWithSearch := container.NewBorder(a.profileSearch, listActions, nil, nil, a.profileList)
+
+	listCard := widget.NewCard("Saved Profiles", "", listWithSearch)
 	split := container.NewHSplit(
 		listCard,
 		a.profileForm.canvas(),
 	)
-	split.SetOffset(0.33)
+	split.SetOffset(0.35)
 
 	return split
 }
 
 func (a *App) handleProfileSelection(index int) {
 	if index < 0 || index >= len(a.profileItems) {
+		a.profileSelectedIdx = -1
 		return
 	}
 
+	a.profileSelectedIdx = index
 	profile := a.profileItems[index]
 	cfg, err := config.LoadConfig(profile.Path)
 	if err != nil {
@@ -87,6 +119,100 @@ func (a *App) handleProfileSelection(index int) {
 	profileCopy := profile
 	a.profileForm.reset(&profileCopy, cfg)
 	a.setStatus("Loaded profile %s", profile.Name)
+}
+
+func (a *App) filterProfileList(query string) {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		a.profileFiltered = nil
+		a.profileList.Refresh()
+		return
+	}
+
+	a.profileFiltered = make([]int, 0)
+	for i, profile := range a.profileItems {
+		if strings.Contains(strings.ToLower(profile.Name), query) ||
+			strings.Contains(strings.ToLower(profile.Type), query) {
+			a.profileFiltered = append(a.profileFiltered, i)
+		}
+	}
+	a.profileList.UnselectAll()
+	a.profileList.Refresh()
+}
+
+func (a *App) getProfileActualIndex(displayIndex int) int {
+	if len(a.profileFiltered) > 0 {
+		if displayIndex >= 0 && displayIndex < len(a.profileFiltered) {
+			return a.profileFiltered[displayIndex]
+		}
+		return -1
+	}
+	return displayIndex
+}
+
+func (a *App) deleteSelectedProfile() {
+	index := a.profileSelectedIdx
+	if index < 0 || index >= len(a.profileItems) {
+		dialog.ShowInformation("Select Profile", "Please select a profile to delete.", a.window)
+		return
+	}
+
+	profile := a.profileItems[index]
+	content := fmt.Sprintf("Are you sure you want to delete '%s'?\n\nType: %s\nPath: %s",
+		profile.Name, strings.ToUpper(profile.Type), profile.Path)
+
+	dialog.ShowConfirm("Delete Profile", content, func(ok bool) {
+		if !ok {
+			return
+		}
+		if err := a.manager.Delete(profile.Name); err != nil {
+			dialog.ShowError(fmt.Errorf("delete profile: %w", err), a.window)
+			a.setStatus("Failed to delete profile: %v", err)
+			return
+		}
+		a.setStatus("Deleted profile %s", profile.Name)
+		a.refreshProfiles()
+		a.profileForm.reset(nil, nil)
+	}, a.window)
+}
+
+func (a *App) duplicateSelectedProfile() {
+	index := a.profileSelectedIdx
+	if index < 0 || index >= len(a.profileItems) {
+		dialog.ShowInformation("Select Profile", "Please select a profile to duplicate.", a.window)
+		return
+	}
+
+	profile := a.profileItems[index]
+	cfg, err := config.LoadConfig(profile.Path)
+	if err != nil {
+		dialog.ShowError(fmt.Errorf("load profile: %w", err), a.window)
+		return
+	}
+
+	newName := profile.Name + "-copy"
+	entry := widget.NewEntry()
+	entry.SetText(newName)
+
+	dialog.ShowForm("Duplicate Profile", "Create", "Cancel",
+		[]*widget.FormItem{widget.NewFormItem("New name", entry)},
+		func(ok bool) {
+			if !ok {
+				return
+			}
+			newAlias := strings.TrimSpace(entry.Text)
+			if newAlias == "" {
+				dialog.ShowError(fmt.Errorf("profile name cannot be empty"), a.window)
+				return
+			}
+			newProfile, err := a.manager.Save(newAlias, cfg)
+			if err != nil {
+				dialog.ShowError(fmt.Errorf("save duplicate: %w", err), a.window)
+				return
+			}
+			a.setStatus("Created duplicate profile %s", newProfile.Name)
+			a.refreshProfiles()
+		}, a.window)
 }
 
 func profileMeta(p profiles.Profile) string {

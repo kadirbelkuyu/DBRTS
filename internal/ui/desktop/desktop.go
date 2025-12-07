@@ -45,11 +45,13 @@ type App struct {
 	status *widget.Label
 	tabs   *container.AppTabs
 
-	profileItems []profiles.Profile
-	profileList  *widget.List
-	profileForm  *profileEditor
+	profileItems       []profiles.Profile
+	profileFiltered    []int
+	profileList        *widget.List
+	profileSearch      *widget.Entry
+	profileSelectedIdx int
+	profileForm        *profileEditor
 
-	explorer   *explorerView
 	operations *operationsView
 }
 
@@ -71,12 +73,10 @@ func (a *App) buildShell() fyne.CanvasObject {
 	status := a.buildStatusBar()
 
 	a.profileForm = newProfileEditor(a)
-	a.explorer = newExplorerView(a)
 	a.operations = newOperationsView(a)
 
 	a.tabs = container.NewAppTabs(
 		container.NewTabItemWithIcon("Profiles", theme.AccountIcon(), a.buildProfilesTab()),
-		container.NewTabItemWithIcon("Explorer", theme.ViewRefreshIcon(), a.buildExplorerTab()),
 		container.NewTabItemWithIcon("Operations", theme.StorageIcon(), a.buildOperationsTab()),
 	)
 	a.tabs.SetTabLocation(container.TabLocationLeading)
@@ -137,9 +137,6 @@ func (a *App) refreshProfiles() {
 		if len(a.profileItems) == 0 {
 			a.profileList.UnselectAll()
 		}
-	}
-	if a.explorer != nil {
-		a.explorer.updateProfiles(profilesList)
 	}
 	if a.operations != nil {
 		a.operations.updateProfiles(profilesList)

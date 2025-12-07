@@ -54,7 +54,11 @@ type operationsView struct {
 	restoreVerbose  *widget.Check
 	restoreRun      *widget.Button
 
-	logOutput *widget.Entry
+	progressBar   *widget.ProgressBarInfinite
+	statusLabel   *widget.Label
+	logOutput     *widget.Entry
+	clearLogBtn   *widget.Button
+	operationTime time.Time
 }
 
 func newOperationsView(app *App) *operationsView {
@@ -117,9 +121,23 @@ func newOperationsView(app *App) *operationsView {
 		view.selectBackupFile()
 	})
 
+	view.progressBar = widget.NewProgressBarInfinite()
+	view.progressBar.Stop()
+	view.progressBar.Hide()
+
+	view.statusLabel = widget.NewLabel("Ready")
+	view.statusLabel.TextStyle = fyne.TextStyle{Bold: true}
+
 	view.logOutput = widget.NewMultiLineEntry()
-	view.logOutput.SetMinRowsVisible(6)
+	view.logOutput.SetMinRowsVisible(8)
 	view.logOutput.Disable()
+
+	view.clearLogBtn = widget.NewButtonWithIcon("Clear Log", theme.ContentClearIcon(), func() {
+		view.logOutput.Enable()
+		view.logOutput.SetText("")
+		view.logOutput.Disable()
+		view.statusLabel.SetText("Log cleared")
+	})
 
 	transferForm := container.NewVBox(
 		container.NewGridWithColumns(2,
@@ -163,11 +181,14 @@ func newOperationsView(app *App) *operationsView {
 		view.restoreRun,
 	)
 
+	logHeader := container.NewBorder(nil, nil, view.statusLabel, view.clearLogBtn, view.progressBar)
+	logCard := widget.NewCard("Activity Log", "", container.NewBorder(logHeader, nil, nil, nil, view.logOutput))
+
 	view.content = container.NewVScroll(container.NewVBox(
 		widget.NewCard("Transfer", "Move data between saved PostgreSQL or MongoDB environments.", transferForm),
 		widget.NewCard("Backup", "Capture portable backups with compression and format controls.", backupForm),
 		widget.NewCard("Restore", "Apply an archived backup to a selected profile.", restoreForm),
-		widget.NewCard("Activity Log", "", container.NewMax(view.logOutput)),
+		logCard,
 	))
 
 	return view
@@ -421,16 +442,27 @@ func (v *operationsView) selectBackupFile() {
 
 func (v *operationsView) execute(action string, button *widget.Button, task func() error) {
 	button.Disable()
+	v.operationTime = time.Now()
+	v.statusLabel.SetText(fmt.Sprintf("Running %s...", action))
+	v.progressBar.Show()
+	v.progressBar.Start()
 	v.appendLog("%s started.", action)
+
 	go func() {
 		err := task()
 		v.app.runOnUI(func() {
+			elapsed := time.Since(v.operationTime).Round(time.Millisecond)
+			v.progressBar.Stop()
+			v.progressBar.Hide()
 			button.Enable()
+
 			if err != nil {
 				dialog.ShowError(err, v.app.window)
-				v.appendLog("%s failed: %v", action, err)
+				v.statusLabel.SetText(fmt.Sprintf("%s failed", action))
+				v.appendLog("%s failed after %v: %v", action, elapsed, err)
 			} else {
-				v.appendLog("%s completed successfully.", action)
+				v.statusLabel.SetText(fmt.Sprintf("%s completed in %v", action, elapsed))
+				v.appendLog("%s completed successfully in %v.", action, elapsed)
 			}
 		})
 	}()

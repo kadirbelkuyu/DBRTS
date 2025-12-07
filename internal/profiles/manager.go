@@ -156,3 +156,20 @@ func sanitizeName(input string) string {
 	}
 	return cleaned
 }
+
+func (m *Manager) Delete(alias string) error {
+	if strings.TrimSpace(alias) == "" {
+		return fmt.Errorf("profile alias cannot be empty")
+	}
+
+	path := alias
+	if !strings.ContainsRune(alias, os.PathSeparator) {
+		path = filepath.Join(m.dir, ensureYAMLExt(alias))
+	}
+
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return fmt.Errorf("profile not found: %s", alias)
+	}
+
+	return os.Remove(path)
+}
