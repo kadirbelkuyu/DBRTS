@@ -6,21 +6,22 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/kadirbelkuyu/DBRTS/internal/config"
-
-	"gopkg.in/yaml.v3"
+	"github.com/kadirbelkuyu/DBRTS/internal/profiles"
+	"github.com/kadirbelkuyu/DBRTS/internal/ui/explorer"
 )
 
 const defaultConfigDir = "configs"
 
 type Application struct {
-	reader      *bufio.Reader
-	printBanner func()
+	reader         *bufio.Reader
+	printBanner    func()
+	profileManager *profiles.Manager
+	service        *Service
 }
 
 func NewApplication(r io.Reader, printBanner func()) *Application {
@@ -36,8 +37,10 @@ func NewApplication(r io.Reader, printBanner func()) *Application {
 	}
 
 	return &Application{
-		reader:      reader,
-		printBanner: printBanner,
+		reader:         reader,
+		printBanner:    printBanner,
+		profileManager: profiles.NewManager(defaultConfigDir),
+		service:        NewService(),
 	}
 }
 
@@ -45,7 +48,7 @@ func (a *Application) RunInteractive() error {
 	if a.printBanner != nil {
 		a.printBanner()
 	}
-	fmt.Println("Interactive mode is ready. Press Ctrl+C or choose option 5 to exit.")
+	fmt.Println("Interactive mode is ready. Press Ctrl+C or choose option 6 to exit.")
 
 	for {
 		fmt.Println()
@@ -54,7 +57,8 @@ func (a *Application) RunInteractive() error {
 		fmt.Println("  2) Create a backup")
 		fmt.Println("  3) Restore a backup")
 		fmt.Println("  4) List databases")
-		fmt.Println("  5) Exit")
+		fmt.Println("  5) Explore a database with the TUI")
+		fmt.Println("  6) Exit")
 
 		fmt.Print("\nChoice: ")
 		choice, err := a.readLine()
@@ -104,7 +108,16 @@ func (a *Application) RunInteractive() error {
 				}
 				fmt.Printf("Listing failed: %v\n", err)
 			}
-		case "5", "exit", "quit", "q":
+		case "5", "explore":
+			if err := a.handleExplore(); err != nil {
+				if errors.Is(err, io.EOF) {
+					fmt.Println()
+					fmt.Println("Exiting interactive mode.")
+					return nil
+				}
+				fmt.Printf("Explorer failed: %v\n", err)
+			}
+		case "6", "exit", "quit", "q":
 			fmt.Println()
 			fmt.Println("Exiting interactive mode.")
 			return nil
@@ -133,7 +146,7 @@ func (a *Application) handleTransfer() error {
 		return err
 	}
 
-	return RunTransfer(sourceCfg, targetCfg, schemaOnlyFlag, dataOnlyFlag, workers, batch, verboseFlag)
+	return a.service.Transfer(sourceCfg, targetCfg, schemaOnlyFlag, dataOnlyFlag, workers, batch, verboseFlag)
 }
 
 func (a *Application) handleBackup() error {
@@ -150,7 +163,7 @@ func (a *Application) handleBackup() error {
 		return err
 	}
 
-	return RunBackup(cfg, verboseFlag)
+	return a.service.Backup(cfg, verboseFlag)
 }
 
 func (a *Application) handleRestore() error {
@@ -167,7 +180,7 @@ func (a *Application) handleRestore() error {
 		return err
 	}
 
-	return RunRestore(cfg, verboseFlag)
+	return a.service.Restore(cfg, verboseFlag)
 }
 
 func (a *Application) handleList() error {
@@ -179,7 +192,19 @@ func (a *Application) handleList() error {
 		return err
 	}
 
-	return ListDatabases(cfg)
+	return a.service.ListDatabases(cfg)
+}
+
+func (a *Application) handleExplore() error {
+	fmt.Println()
+	fmt.Println("Explore a database in the console UI")
+
+	cfg, err := a.loadOrPromptConfig("database", "")
+	if err != nil {
+		return err
+	}
+
+	return explorer.Run(cfg)
 }
 
 func (a *Application) promptString(label string, required bool) (string, error) {
@@ -251,7 +276,9 @@ func (a *Application) loadOrPromptConfig(label, expectedType string) (*config.Co
 	for {
 		fmt.Printf("\nConfigure %s connection\n", label)
 
-		if cfg := a.selectSavedConfig(expectedType); cfg != nil {
+		if cfg, ok, err := a.selectProfile(expectedType); err != nil {
+			return nil, err
+		} else if ok {
 			return cfg, nil
 		}
 
@@ -498,92 +525,56 @@ func (a *Application) readLine() (string, error) {
 	return strings.TrimSpace(line), nil
 }
 
-type savedConfig struct {
-	path string
-	name string
-}
+func (a *Application) selectProfile(expectedType string) (*config.Config, bool, error) {
+	profiles, err := a.profileManager.List(expectedType)
+	if err != nil {
+		return nil, false, err
+	}
 
-func (a *Application) selectSavedConfig(expectedType string) *config.Config {
-	candidates := a.findSavedConfigs(expectedType)
-	if len(candidates) == 0 {
-		return nil
+	if len(profiles) == 0 {
+		return nil, false, nil
 	}
 
 	for {
 		fmt.Println("Saved configurations:")
-		for i, c := range candidates {
-			fmt.Printf("  %d) %s\n", i+1, c.name)
+		for i, profile := range profiles {
+			label := profile.Name
+			if profile.Type != "" {
+				label = fmt.Sprintf("%s (%s)", label, profile.Type)
+			}
+			fmt.Printf("  %d) %s\n", i+1, label)
 		}
 		fmt.Println("  n) Create a new configuration")
 
 		choice, err := a.promptString("Select a configuration (number) or 'n'", true)
 		if err != nil {
-			return nil
+			return nil, false, err
 		}
 
 		choice = strings.ToLower(strings.TrimSpace(choice))
 		if choice == "n" || choice == "new" {
-			return nil
+			return nil, false, nil
 		}
 
 		index, err := strconv.Atoi(choice)
-		if err != nil || index < 1 || index > len(candidates) {
+		if err != nil || index < 1 || index > len(profiles) {
 			fmt.Println("Please choose a valid option.")
 			continue
 		}
 
-		selected := candidates[index-1]
-		cfg, err := config.LoadConfig(selected.path)
+		cfg, err := config.LoadConfig(profiles[index-1].Path)
 		if err != nil {
-			fmt.Printf("Failed to load %s: %v\n", selected.name, err)
+			fmt.Printf("Failed to load %s: %v\n", profiles[index-1].Name, err)
 			continue
 		}
-		return cfg
+
+		return cfg, true, nil
 	}
-}
-
-func (a *Application) findSavedConfigs(expectedType string) []savedConfig {
-	dirEntries, err := os.ReadDir(defaultConfigDir)
-	if err != nil {
-		return nil
-	}
-
-	var configs []savedConfig
-	for _, entry := range dirEntries {
-		if entry.IsDir() {
-			continue
-		}
-
-		if !strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml") {
-			continue
-		}
-
-		path := filepath.Join(defaultConfigDir, entry.Name())
-		cfg, err := config.LoadConfig(path)
-		if err != nil {
-			continue
-		}
-
-		if expectedType != "" && cfg.Database.Type != expectedType {
-			continue
-		}
-
-		configs = append(configs, savedConfig{
-			path: path,
-			name: entry.Name(),
-		})
-	}
-
-	return configs
 }
 
 func (a *Application) persistConfig(cfg *config.Config) error {
 	save, err := a.promptYesNo("Save this configuration for future use?", true)
 	if err != nil || !save {
-		return err
-	}
-
-	if err := os.MkdirAll(defaultConfigDir, 0o755); err != nil {
 		return err
 	}
 
@@ -593,35 +584,6 @@ func (a *Application) persistConfig(cfg *config.Config) error {
 		return err
 	}
 
-	filename := sanitizeFileName(name)
-	if !strings.HasSuffix(filename, ".yaml") && !strings.HasSuffix(filename, ".yml") {
-		filename += ".yaml"
-	}
-
-	path := filepath.Join(defaultConfigDir, filename)
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(path, data, 0o644)
-}
-
-func sanitizeFileName(name string) string {
-	name = strings.TrimSpace(name)
-	name = strings.ReplaceAll(name, " ", "_")
-	return strings.Map(func(r rune) rune {
-		switch {
-		case r >= 'a' && r <= 'z':
-			return r
-		case r >= 'A' && r <= 'Z':
-			return r
-		case r >= '0' && r <= '9':
-			return r
-		case r == '-', r == '_':
-			return r
-		default:
-			return '_'
-		}
-	}, name)
+	_, err = a.profileManager.Save(name, cfg)
+	return err
 }
