@@ -34,6 +34,10 @@ test:
 	@echo ">> running entire test suite"
 	@go test ./...
 
+desktop:
+	@echo ">> building desktop app"
+	@go run ./cmd/dbrts desktop
+
 test-unit:
 	@echo ">> running unit tests"
 	@go test ./tests/... ./pkg/... ./internal/...
